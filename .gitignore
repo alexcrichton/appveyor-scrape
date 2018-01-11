@@ -1,2 +1,6 @@
 target
 logs
+*.dat
+*.png
+*.pdf
+*.jpg

@@ -297,14 +297,18 @@ fn main() {
     let branch = "auto".to_string();
     let builds = AppVeyorBuilds::new(sess.clone(), token.clone(), Some(branch));
 
+    // we're only interested in successful builds right now
     let builds = builds.filter(|b| b.status == "success");
 
+    // fetch the `Build` again so we can include all the jobs
     let builds = builds.map(|b| {
         let url = format!("/projects/rust-lang/rust/build/{}", b.version);
         http::appveyor_get::<GetBuild>(&sess, &url, &token)
             .map(|b| b.build)
     }).buffer_unordered(20);
 
+    // Flatten our list of builds into a list of (build, job) pairs. At the same
+    // time also filter the jobs to the only ones we're interested in.
     let builds = builds.map(|mut b| {
         let jobs = mem::replace(&mut b.jobs, Vec::new());
         let b = Rc::new(b);
@@ -316,6 +320,7 @@ fn main() {
         )
     }).flatten();
 
+    // Fetch the build logs for a job
     let builds = builds.map(|(b, j)| {
         let url = format!("https://ci.appveyor.com/api/buildjobs/{}/log", j.job_id);
         http::get(&sess, &url, None, None, &[])
@@ -332,6 +337,7 @@ fn main() {
     t!(fs::create_dir_all(&dst.join("msvc")));
     t!(fs::create_dir_all(&dst.join("gnu")));
 
+    // Write out all logs to the logs directory with indexed logs
     let c = builds.for_each(|(build, job, log)| {
         let msvc = job.name.contains("pc-windows-msvc");
         let dst = dst.join(if msvc { "msvc" } else { "gnu" });
