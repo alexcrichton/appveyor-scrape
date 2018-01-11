@@ -8,22 +8,10 @@ const MIN: usize = 0;
 const MAX: usize = 10_000;
 
 const SERIES: &[(&str, &str)] = &[
-    (
-        "Building stage0 compiler artifacts",
-        "Assembling stage2 compiler",
-    ),
-    (
-        "Check compiletest suite=run-pass mode=run-pass",
-        "test result: ok",
-    ),
-    (
-        "Building LLVM",
-        "Building stage0 compiler artifacts",
-    ),
-    (
-        "Testing libstd stage1",
-        "Testing libtest stage1",
-    ),
+    // (
+    //     "Building stage0 compiler artifacts",
+    //     "Assembling stage2 compiler",
+    // ),
     (
         "Building stage0 compiler artifacts",
         "Copying stage0 rustc",
@@ -31,6 +19,18 @@ const SERIES: &[(&str, &str)] = &[
     (
         "Building stage1 compiler artifacts",
         "Copying stage1 rustc",
+    ),
+    (
+        "Check compiletest suite=run-pass mode=run-pass",
+        "test result: ok",
+    ),
+    (
+        "Testing libstd stage1",
+        "Testing libtest stage1",
+    ),
+    (
+        "Building LLVM",
+        "Building stage0 compiler artifacts",
     ),
 ];
 
@@ -46,6 +46,7 @@ fn main() {
     files.sort();
 
     let mut data = String::new();
+    let mut data2 = String::new();
     let mut contents = String::new();
     let zero = Duration::from_secs(0);
     for file in files {
@@ -69,15 +70,17 @@ fn main() {
 
         let mut lines = contents.lines();
 
+        let mut last = zero;
         for line in lines {
+            last = parse(line).1;
             for (series, durs) in SERIES.iter().zip(&mut durs) {
                 if durs.0 == zero {
                     if line.contains(series.0) {
-                        durs.0 = parse(line).1;
+                        durs.0 = last;
                     }
                 } else if durs.1 == zero {
                     if line.contains(series.1) {
-                        durs.1 = parse(line).1;
+                        durs.1 = last;
                     }
                 }
             }
@@ -91,18 +94,36 @@ fn main() {
                     0
                 }
             })
-            .map(|s| s.to_string())
             .collect::<Vec<_>>();
-        if secs.iter().any(|s| *s == "0") {
+        if secs.iter().any(|s| *s == 0) {
             continue
         }
-        data.push_str(&format!("{} {}\n",
-                               file.file_name().unwrap().to_str().unwrap(),
-                               secs.join(" ")));
+        let remaining = durs.iter().fold(last, |c, &(a, b)| c - (b - a));
+        data.push_str(file.file_name().unwrap().to_str().unwrap());
+        data.push_str(" ");
+        data.push_str(&(remaining.as_secs() + secs.iter().sum::<u64>()).to_string());
+        data.push_str(" ");
+        for (i, s) in secs.iter().enumerate() {
+            data.push_str(&(s + secs[i+1..].iter().sum::<u64>()).to_string());
+            data.push_str(" ");
+        }
+        data.push_str("\n");
+
+        data2.push_str(file.file_name().unwrap().to_str().unwrap());
+        data2.push_str(" ");
+        data2.push_str(&remaining.as_secs().to_string());
+        data2.push_str(" ");
+        for s in secs.iter() {
+            data2.push_str(&s.to_string());
+            data2.push_str(" ");
+        }
+        data2.push_str("\n");
     }
 
     fs::File::create("two-log-statements.dat").unwrap()
         .write_all(data.as_bytes()).unwrap();
+    fs::File::create("two-log-statements2.dat").unwrap()
+        .write_all(data2.as_bytes()).unwrap();
 }
 
 fn parse(s: &str) -> (&str, Duration) {
